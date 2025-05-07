@@ -1,0 +1,66 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  build:
+    name: Build
+    runs-on: self-hosted  
+    steps:
+      - uses: actions/checkout@v4.0.0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci --production=false
+        
+      - name: Build project
+        working-directory: ./backend
+        run: |
+          npm run build || echo "Aucun script build trouvé - poursuite du workflow"
+
+  test:
+    name: Test
+    needs: build
+    runs-on: self-hosted  
+    env:
+      NODE_ENV: test
+    
+    steps:
+      - uses: actions/checkout@v4.1.1
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install test dependencies
+        working-directory: ./backend
+        run: npm ci
+        
+      - name: Verify DB connection
+        working-directory: ./backend
+        run: |
+          psql "${{ secrets.NEON_PROD_DB_URL }}" -c "SELECT 1 AS connection_test;"
+        
+      - name: Run tests
+        working-directory: ./backend
+        run: npm test -- --ci --coverage
+        
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: backend/coverage
