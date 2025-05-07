@@ -1,4 +1,4 @@
-name: chaine CI/CD build test
+name: CI/CD build test
 
 on:
   push:
@@ -20,10 +20,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           
-      - name: Install dependencies
+      - name: Clean install
         working-directory: ./backend
-        run: npm ci --production=false
-        
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install --production=false
+          npm ci --production=false
+          
       - name: Build project
         working-directory: ./backend
         run: |
@@ -47,8 +50,11 @@ jobs:
           
       - name: Install test dependencies
         working-directory: ./backend
-        run: npm ci
-        
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
+          npm ci
+          
       - name: Verify DB connection
         working-directory: ./backend
         run: |
