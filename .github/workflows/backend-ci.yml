@@ -1,4 +1,4 @@
-name: CI/CD Reservation Service
+name: chaine CI/CD Reservation Service
 
 on:
   push:
