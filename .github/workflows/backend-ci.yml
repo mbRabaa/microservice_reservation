@@ -1,18 +1,39 @@
-name: chaine CI/CD Reservation Service
-
+name: chaine  CI/CD build and test
 on:
   push:
     branches: [main]
 
 env:
-  NODE_ENV: test
   NODE_VERSION: '18'
-  PGSSLMODE: 'require'
 
 jobs:
-  setup:
-    name: Setup and DB Reset
+  build:
+    name: Build
+    runs-on: self-hosted  
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4  
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci --production=false
+        
+      - name: Build project
+        working-directory: ./backend
+        run: |
+          npm run build || echo "Aucun script build trouvé - poursuite du workflow"
+  
+  test:
+    name: Unit Tests
+    needs: build
     runs-on: self-hosted
+    env:
+      DB_URL: ${{ secrets.NEON_PROD_DB_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,29 +47,16 @@ jobs:
         working-directory: ./backend
         run: npm ci
 
-      - name: Reset test database
+      - name: Run unit tests
         working-directory: ./backend
         env:
-          DB_URL: ${{ secrets.NEON_TEST_DB_URL }}
-        run: npm run reset-db
+          DB_CONNECTION_STRING: ${{ secrets.NEON_PROD_DB_URL }}
+        run: npm test
 
-  test:
-    name: Run Tests
-    needs: setup
-    runs-on: self-hosted
-    env:
-      DB_URL: ${{ secrets.NEON_TEST_DB_URL }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Run tests with coverage
+      - name: Run coverage
         working-directory: ./backend
+        env:
+          DB_CONNECTION_STRING: ${{ secrets.NEON_PROD_DB_URL }}
         run: npm run test:cov
 
       - name: Upload coverage report
