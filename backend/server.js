@@ -261,3 +261,5 @@ app.listen(port, () => {
   console.log(`- GET  /trajets`);
   console.log(`- GET  /health\n`);
 });
+
+module.exports = { app, pool };

@@ -1,72 +1,58 @@
-name: CI/CD build test
+name: CI/CD Reservation Service
 
 on:
   push:
     branches: [main]
 
 env:
+  NODE_ENV: test
   NODE_VERSION: '18'
+  PGSSLMODE: 'require'
 
 jobs:
-  build:
-    name: Build
-    runs-on: self-hosted  
+  setup:
+    name: Setup and DB Reset
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4.0.0
-      
+      - uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          
-      - name: Clean install
+
+      - name: Install dependencies
         working-directory: ./backend
-        run: |
-          rm -rf node_modules package-lock.json
-          npm install --production=false
-          npm ci --production=false
-          
-      - name: Build project
+        run: npm ci
+
+      - name: Reset test database
         working-directory: ./backend
-        run: |
-          npm run build || echo "Aucun script build trouvé - poursuite du workflow"
+        env:
+          DB_URL: ${{ secrets.NEON_TEST_DB_URL }}
+        run: npm run reset-db
 
   test:
-    name: Test
-    needs: build
-    runs-on: self-hosted  
+    name: Run Tests
+    needs: setup
+    runs-on: self-hosted
     env:
-      NODE_ENV: test
-    
+      DB_URL: ${{ secrets.NEON_TEST_DB_URL }}
     steps:
-      - uses: actions/checkout@v4.1.1
-      
+      - uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          
-      - name: Install test dependencies
+
+      - name: Run tests with coverage
         working-directory: ./backend
-        run: |
-          rm -rf node_modules package-lock.json
-          npm install
-          npm ci
-          
-      - name: Verify DB connection
-        working-directory: ./backend
-        run: |
-          psql "${{ secrets.NEON_PROD_DB_URL }}" -c "SELECT 1 AS connection_test;"
-        
-      - name: Run tests
-        working-directory: ./backend
-        run: npm test 
-        
-      - name: Upload coverage
+        run: npm run test:cov
+
+      - name: Upload coverage report
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: coverage-report
           path: backend/coverage
