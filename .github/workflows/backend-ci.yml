@@ -1,4 +1,4 @@
-name: CI/CD build, test and deploy
+name: CI/CD Microservice Réservation
 
 on:
   push:
@@ -6,13 +6,15 @@ on:
 
 env:
   NODE_VERSION: '18'
-  DOCKER_HUB_REPO: mbrabbaa2023/reservation
-  DOCKER_TAG: 'latest'
+  DOCKER_IMAGE: mbrabaa2023/reservation
+  DB_URL: ${{ secrets.NEON_PROD_DB_URL }}
 
 jobs:
   build:
     name: Build
     runs-on: self-hosted  
+    outputs:
+      build-artifact: ${{ steps.upload-artifact.outputs.artifact-name }}
     steps:
       - uses: actions/checkout@v4
       
@@ -30,13 +32,28 @@ jobs:
         working-directory: ./backend
         run: |
           npm run build || echo "Aucun script build trouvé - poursuite du workflow"
+          
+      - name: Create build artifact
+        working-directory: ./backend
+        run: |
+          mkdir -p dist/
+          # Copiez ici les fichiers nécessaires pour le build Docker
+          cp -r package*.json server.js Dockerfile dist/
+          
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        id: upload-artifact
+        with:
+          name: backend-build
+          path: ./backend/dist/
+          retention-days: 1
 
   test:
     name: Unit Tests
     needs: build
     runs-on: self-hosted
     env:
-      DB_URL: ${{ secrets.NEON_PROD_DB_URL }}
+      DB_CONNECTION_STRING: ${{ secrets.NEON_PROD_DB_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -50,44 +67,31 @@ jobs:
         working-directory: ./backend
         run: npm ci
 
-      - name: Run unit tests with coverage
+      - name: Run unit tests
         working-directory: ./backend
-        env:
-          DB_CONNECTION_STRING: ${{ secrets.NEON_PROD_DB_URL }}
-        run: |
-          npm test
-          npm run coverage -- --coverage || echo "Le rapport de couverture sera généré par Jest"
+        run: npm test
 
-      - name: Upload coverage report
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: backend/coverage
-
-  build-and-push-image:
-    name: Build and Push Docker Image
-    needs: test
+  build-and-push:
+    needs: [build, test]
     runs-on: self-hosted
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - name: 🔑 Authentification Docker Hub
+        run: echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
+      - name: 📥 Récupérer l'artefact de build
+        uses: actions/download-artifact@v4
         with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+          name: backend-build
+          path: ./docker-build
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ env.DOCKER_HUB_REPO }}:${{ env.DOCKER_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-    
+      - name: 🐳 Build et Push Docker
+        run: |
+          cd docker-build
+          docker build \
+            -t $DOCKER_IMAGE:latest \
+            -t $DOCKER_IMAGE:$GITHUB_SHA \
+            .
+          
+          docker push $DOCKER_IMAGE:latest
+          docker push $DOCKER_IMAGE:$GITHUB_SHA
