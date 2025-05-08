@@ -1,4 +1,4 @@
-name: chaine CI/CD Microservice Réservation
+name: CI/CD Microservice Réservation
 
 on:
   push:
@@ -8,6 +8,8 @@ env:
   NODE_VERSION: '18'
   DOCKER_IMAGE: mbrabaa2023/reservation
   DB_URL: ${{ secrets.NEON_PROD_DB_URL }}
+  CONTAINER_NAME: microservice_reservation
+  PORT: 3004
 
 jobs:
   build:
@@ -37,7 +39,6 @@ jobs:
         working-directory: ./backend
         run: |
           mkdir -p dist/
-          # Copiez ici les fichiers nécessaires pour le build Docker
           cp -r package*.json server.js Dockerfile dist/
           
       - name: Upload build artifact
@@ -95,3 +96,31 @@ jobs:
           
           docker push $DOCKER_IMAGE:latest
           docker push $DOCKER_IMAGE:$GITHUB_SHA
+
+  deploy:
+    name: 🚀 Déploiement Docker
+    needs: build-and-push
+    runs-on: self-hosted
+    steps:
+      - name: Arrêter et supprimer le conteneur existant
+        run: |
+          docker stop ${{ env.CONTAINER_NAME }} || true
+          docker rm ${{ env.CONTAINER_NAME }} || true
+
+      - name: Puller la dernière image
+        run: docker pull ${{ env.DOCKER_IMAGE }}:latest
+
+      - name: Créer et démarrer le conteneur
+        run: |
+          docker run -d \
+            --name ${{ env.CONTAINER_NAME }} \
+            --restart unless-stopped \
+            -p ${{ env.PORT }}:3004 \
+            -e DB_CONNECTION_STRING="${{ secrets.NEON_PROD_DB_URL }}" \
+            ${{ env.DOCKER_IMAGE }}:latest
+
+      - name: Vérifier le statut du conteneur
+        run: |
+          sleep 10  # Attendre le démarrage
+          docker ps -f name=${{ env.CONTAINER_NAME }}
+          docker logs ${{ env.CONTAINER_NAME }} --tail 50
