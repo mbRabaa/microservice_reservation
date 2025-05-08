@@ -1,64 +1,65 @@
 const request = require('supertest');
-const { app, pool } = require('./server');
+const { app, pool, server: mainServer } = require('./server');
 const { v4: uuidv4 } = require('uuid');
 
 // Configuration pour les tests
 const TEST_PORT = 3005;
-let server;
+let testServer;
 
-// Augmenter le timeout pour les tests (30 secondes)
+// Augmenter le timeout pour les tests
 jest.setTimeout(30000);
 
 // Données de test
 const testTrajet = {
   depart: 'Tunis',
   destination: 'Sousse',
-  date_depart: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Format YYYY-MM-DD
+  date_depart: new Date(Date.now() + 86400000).toISOString().split('T')[0],
   heure_depart: '08:00:00',
   prix: 15.50,
-  duree_voyage: '02:00:00' // Format HH:MM:SS
+  duree_voyage: '02:00:00'
 };
 
 const testReservation = {
   seats: 2,
-  trajet_id: null // Sera rempli après création du trajet
+  trajet_id: null
+};
+
+// Fonction utilitaire pour fermer proprement les serveurs
+const closeServer = (server) => {
+  return new Promise((resolve, reject) => {
+    if (server && server.listening) {
+      server.close((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    } else {
+      resolve();
+    }
+  });
 };
 
 beforeAll(async () => {
   try {
-    // Démarrer le serveur sur un port différent pour les tests
-    server = app.listen(TEST_PORT);
+    // Démarrer le serveur de test
+    testServer = app.listen(TEST_PORT);
     console.log(`\n🚀 Serveur de test démarré sur http://localhost:${TEST_PORT}`);
 
-    // Vérifier si le trajet existe déjà pour éviter les doublons
-    const existingTrajet = await pool.query(
-      `SELECT id FROM trajets 
-       WHERE depart = $1 AND destination = $2 
-       AND date_depart = $3 AND heure_depart = $4 
-       LIMIT 1`,
-      [testTrajet.depart, testTrajet.destination, testTrajet.date_depart, testTrajet.heure_depart]
+    // Créer un trajet de test
+    const trajetRes = await pool.query(
+      `INSERT INTO trajets 
+       (depart, destination, date_depart, heure_depart, prix, duree_voyage) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
+       RETURNING id`,
+      [
+        testTrajet.depart,
+        testTrajet.destination,
+        testTrajet.date_depart,
+        testTrajet.heure_depart,
+        testTrajet.prix,
+        testTrajet.duree_voyage
+      ]
     );
-
-    if (existingTrajet.rows.length > 0) {
-      testReservation.trajet_id = existingTrajet.rows[0].id;
-    } else {
-      // Créer un nouveau trajet de test avec tous les champs requis
-      const trajetRes = await pool.query(
-        `INSERT INTO trajets 
-         (depart, destination, date_depart, heure_depart, prix, duree_voyage) 
-         VALUES ($1, $2, $3, $4, $5, $6) 
-         RETURNING id`,
-        [
-          testTrajet.depart,
-          testTrajet.destination,
-          testTrajet.date_depart,
-          testTrajet.heure_depart,
-          testTrajet.prix,
-          testTrajet.duree_voyage
-        ]
-      );
-      testReservation.trajet_id = trajetRes.rows[0].id;
-    }
+    testReservation.trajet_id = trajetRes.rows[0].id;
   } catch (err) {
     console.error('❌ Erreur dans beforeAll:', err);
     throw err;
@@ -68,13 +69,23 @@ beforeAll(async () => {
 afterAll(async () => {
   try {
     // Nettoyer la base de données
-    await pool.query('DELETE FROM paiements WHERE reservation_id IN (SELECT id FROM reservations WHERE trajet_id = $1)', [testReservation.trajet_id]);
-    await pool.query('DELETE FROM reservations WHERE trajet_id = $1', [testReservation.trajet_id]);
-    await pool.query('DELETE FROM trajets WHERE id = $1', [testReservation.trajet_id]);
-    
-    // Fermer les connexions
-    await pool.end();
-    server.close();
+    if (testReservation.trajet_id) {
+      await pool.query('DELETE FROM paiements WHERE reservation_id IN (SELECT id FROM reservations WHERE trajet_id = $1)', [testReservation.trajet_id]);
+      await pool.query('DELETE FROM reservations WHERE trajet_id = $1', [testReservation.trajet_id]);
+      await pool.query('DELETE FROM trajets WHERE id = $1', [testReservation.trajet_id]);
+    }
+
+    // Fermer le pool de connexions PostgreSQL
+    if (pool) {
+      await pool.end();
+      // Petite pause pour permettre la fermeture des connexions
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    // Fermer les serveurs
+    await closeServer(testServer);
+    await closeServer(mainServer);
+
     console.log('✅ Nettoyage après tests terminé');
   } catch (err) {
     console.error('❌ Erreur dans afterAll:', err);
@@ -116,7 +127,6 @@ describe('Service de Réservation', () => {
       expect(response.body.reservation.id).toBeDefined();
       expect(response.body.reservation.trajet_id).toBe(testReservation.trajet_id);
       expect(response.body.reservation.nombre_places).toBe(testReservation.seats);
-      // Correction: Vérifie le statut réel retourné par l'API
       expect(['En attente', 'confirmée']).toContain(response.body.reservation.statut);
       expect(response.body.reservation.depart).toBe(testTrajet.depart);
       expect(response.body.reservation.destination).toBe(testTrajet.destination);
@@ -188,7 +198,6 @@ describe('Service de Réservation', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.paiement).toBeDefined();
       expect(response.body.paiement.id).toBeDefined();
-      // Correction: Accepte les deux formats de montant
       expect(response.body.paiement.montant).toMatch(/^31(\.00)?$/);
       expect(response.body.paiement.mode_paiement).toBe(paymentData.mode_paiement);
       expect(['completé', 'Complété']).toContain(response.body.paiement.statut);

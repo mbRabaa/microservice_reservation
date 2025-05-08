@@ -262,4 +262,15 @@ app.listen(port, () => {
   console.log(`- GET  /health\n`);
 });
 
-module.exports = { app, pool };
+
+// Ajoutez cette fonction
+function closeServer() {
+  return new Promise((resolve) => {
+    server.close(() => {
+      console.log('Server closed');
+      resolve();
+    });
+  });
+}
+
+module.exports = { app, pool, closeServer };
