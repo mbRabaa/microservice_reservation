@@ -1,4 +1,4 @@
-name: CI/CD Microservice Réservation
+name: chaine CI/CD Microservice Réservation
 
 on:
   push:
