@@ -39,6 +39,7 @@ jobs:
         working-directory: ./backend
         run: |
           mkdir -p dist/
+          # Copiez ici les fichiers nécessaires pour le build Docker
           cp -r package*.json server.js Dockerfile dist/
           
       - name: Upload build artifact
@@ -97,7 +98,7 @@ jobs:
           docker push $DOCKER_IMAGE:latest
           docker push $DOCKER_IMAGE:$GITHUB_SHA
 
-  deploy:
+  deploy-docker:
     name: 🚀 Déploiement Docker
     needs: build-and-push
     runs-on: self-hosted
