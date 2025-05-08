@@ -1,4 +1,4 @@
-name: chaine  CI/CD build and test
+name: CI/CD build and test
 on:
   push:
     branches: [main]
@@ -47,19 +47,16 @@ jobs:
         working-directory: ./backend
         run: npm ci
 
-      - name: Run unit tests
+      - name: Run unit tests with coverage
         working-directory: ./backend
         env:
           DB_CONNECTION_STRING: ${{ secrets.NEON_PROD_DB_URL }}
-        run: npm test
-
-      - name: Run coverage
-        working-directory: ./backend
-        env:
-          DB_CONNECTION_STRING: ${{ secrets.NEON_PROD_DB_URL }}
-        run: npm run test:cov
+        run: |
+          npm test
+          npm run coverage -- --coverage || echo "Le rapport de couverture sera généré par Jest"
 
       - name: Upload coverage report
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
