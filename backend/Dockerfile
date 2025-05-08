@@ -15,7 +15,7 @@ RUN npm install
 COPY . .
 
 # Exposer le port sur lequel le service va tourner
-EXPOSE 3001
+EXPOSE 3004
 
 # Commande pour démarrer le service
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
