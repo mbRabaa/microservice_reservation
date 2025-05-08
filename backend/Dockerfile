@@ -1,21 +1,17 @@
-
-# Utiliser une image Node officielle comme base
 FROM node:18-alpine
-
-# Définir le répertoire de travail dans le conteneur
 WORKDIR /app
 
-# Copier les fichiers package.json et package-lock.json
+# Installation sécurisée des dépendances
 COPY package*.json ./
+RUN npm ci --production --ignore-scripts && \
+    npm cache clean --force
 
-# Installer les dépendances
-RUN npm install
-
-# Copier le reste des fichiers du projet
+# Copie des fichiers
 COPY . .
 
-# Exposer le port sur lequel le service va tourner
-EXPOSE 3004
+# Configuration sécurité
+RUN chown -R node:node /app
+USER node
 
-# Commande pour démarrer le service
+EXPOSE 3004
 CMD ["node", "server.js"]
