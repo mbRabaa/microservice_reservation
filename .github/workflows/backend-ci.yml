@@ -36,10 +36,12 @@ jobs:
           npm run build || echo "Aucun script build trouvé - poursuite du workflow"
           
       - name: Create build artifact
-        working-directory: ./backend
+        working-directory: .  # Racine du projet
         run: |
-          mkdir -p dist/
-          cp -r package*.json server.js Dockerfile k8s/ dist/
+            mkdir -p backend/dist/
+            cp -r backend/package*.json backend/server.js backend/Dockerfile k8s backend/dist/
+            echo "Contenu de dist/:"
+            ls -la backend/dist/
           
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
