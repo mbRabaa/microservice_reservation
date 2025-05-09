@@ -172,4 +172,26 @@ jobs:
           kubectl get pods -n frontend -l app=reservation
           kubectl exec -n frontend deployment/reservation-app -- env | grep DB
 
+      - name: Health Check
+        run: |
+            echo "Vérification du health check..."
+            kubectl rollout status deployment/reservation-app -n frontend --timeout=10s
+            HEALTH_CHECK=$(kubectl exec -n frontend deployment/reservation-app -- curl -s http://localhost:3004/health || echo "FAIL")
+            if [[ "$HEALTH_CHECK" != *"healthy"* ]]; then
+              echo "❌ Health check échoué: $HEALTH_CHECK"
+              exit 1
+            fi
+            echo "✅ Health check réussi"
+  
+      - name: Rollback if failed
+        if: failure()
+        run: |
+            echo "⚠️ Déclenchement du rollback..."
+            kubectl rollout undo deployment/reservation-app -n frontend
+            kubectl rollout status deployment/reservation-app -n frontend
+            echo "Rollback terminé. Vérification des pods:"
+            kubectl get pods -n frontend -l app=reservation
+            echo "Vérification des logs du dernier pod:"
+            kubectl logs -n frontend $(kubectl get pods -n frontend -l app=reservation -o jsonpath='{.items[0].metadata.name}') --tail=50   
+
       
