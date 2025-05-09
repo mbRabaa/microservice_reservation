@@ -1,4 +1,4 @@
-name:  CI/CD Microservice Réservation
+name: CI/CD Microservice Réservation
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
 env:
   NODE_VERSION: '18'
   DOCKER_IMAGE: mbrabaa2023/reservation
-  DB_URL: ${{ secrets.NEON_PROD_DB_URL }}
   CONTAINER_NAME: microservice_reservation
   PORT: 3004
+  K8S_NAMESPACE: frontend
 
 jobs:
   build:
@@ -39,8 +39,7 @@ jobs:
         working-directory: ./backend
         run: |
           mkdir -p dist/
-          # Copiez ici les fichiers nécessaires pour le build Docker
-          cp -r package*.json server.js Dockerfile dist/
+          cp -r package*.json server.js Dockerfile k8s/ dist/
           
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -103,10 +102,13 @@ jobs:
     needs: build-and-push
     runs-on: self-hosted
     steps:
-      - name: Arrêter et supprimer le conteneur existant
+      - name: Vérifier et nettoyer les conteneurs existants
         run: |
-          docker stop ${{ env.CONTAINER_NAME }} || true
-          docker rm ${{ env.CONTAINER_NAME }} || true
+          if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+            docker stop ${{ env.CONTAINER_NAME }} || true
+            docker rm ${{ env.CONTAINER_NAME }} || true
+            echo "♻️ Ancien conteneur supprimé"
+          fi
 
       - name: Puller la dernière image
         run: docker pull ${{ env.DOCKER_IMAGE }}:latest
@@ -122,13 +124,13 @@ jobs:
 
       - name: Vérifier le statut du conteneur
         run: |
-          sleep 10  # Attendre le démarrage
+          sleep 10
           docker ps -f name=${{ env.CONTAINER_NAME }}
           docker logs ${{ env.CONTAINER_NAME }} --tail 50
 
   deploy-k3s:
     name: 🚀 Déploiement Kubernetes (k3s)
-    needs: build-and-push  # Modifié pour dépendre directement de build-and-push
+    needs: build-and-push
     runs-on: self-hosted
     steps:
       - name: Checkout code
@@ -150,13 +152,26 @@ jobs:
             exit 1
           fi
 
+      - name: Create or update DB secret
+        run: |
+          kubectl create secret generic reservation-secret \
+            --namespace=frontend \
+            --from-literal=DB_CONNECTION_STRING="${{ secrets.NEON_PROD_DB_URL }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Apply Kubernetes manifests
         working-directory: ./k8s
         run: |
-          kubectl apply -k . --namespace=frontend || \
-          kubectl apply -f deployment.yaml -f service.yaml -f secret.yaml --namespace=frontend
+          kubectl apply -f deployment.yaml -f service.yaml --namespace=frontend
 
       - name: Verify deployment
         run: |
           kubectl rollout status deployment/reservation-app -n frontend
           kubectl get pods -n frontend -l app=reservation
+          kubectl exec -n frontend deployment/reservation-app -- env | grep DB
+
+      - name: Verify deployment
+        run: |
+            kubectl rollout status deployment/reservation-app -n ${{ env.K8S_NAMESPACE }}
+            kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=reservation
+            kubectl exec -n ${{ env.K8S_NAMESPACE }} deployment/reservation-app -- env | grep DB
