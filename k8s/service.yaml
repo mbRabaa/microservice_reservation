@@ -3,9 +3,11 @@ kind: Service
 metadata:
   name: reservation-service
 spec:
+  type: NodePort  
   selector:
     app: reservation
   ports:
   - protocol: TCP
-    port: 80
-    targetPort: 3004
+    port: 80       # Port interne du service
+    targetPort: 3004  # Port du pod
+    nodePort: 30081  # Port externe
