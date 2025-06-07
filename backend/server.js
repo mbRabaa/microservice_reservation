@@ -14,10 +14,10 @@ app.use(express.json());
 
 // Connexion à PostgreSQL
 const pool = new Pool({
-  connectionString: process.env.DB_CONNECTION_STRING || "postgresql://neondb_owner:npg_LoQ5RBJjif2k@ep-still-meadow-a4hzplir-pooler.us-east-1.aws.neon.tech/reservation?sslmode=require&password=npg_LoQ5RBJjif2k",
+  connectionString: process.env.DB_CONNECTION_STRING || "postgresql://neondb_owner:npg_LoQ5RBJjif2k@ep-still-meadow-a4hzplir-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require",
   ssl: { rejectUnauthorized: false },
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
+  idleTimeoutMillis: 50000,
+  connectionTimeoutMillis: 30000
 });
 
 // Test de connexion au démarrage

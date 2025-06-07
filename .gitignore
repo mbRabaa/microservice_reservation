@@ -1,11 +1,16 @@
 # Dependencies
 node_modules/
 .npm
-.package-lock.json
+package-lock.json  # Correction: pas de point au début
 
 # Tests et couverture
 coverage/
 .nyc_output/
+
+# Configuration
+config.js          # Ajouté ici
+config/*.js        # Pour ignorer tous les fichiers JS dans un dossier config/
+*.config.js        # Pour tous les fichiers se terminant par .config.js
 
 # Environnement
 .env
