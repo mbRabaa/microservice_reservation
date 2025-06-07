@@ -72,7 +72,7 @@ app.post('/reservations', async (req, res) => {
 
     // Vérification que le trajet existe
     const trajet = await pool.query(
-      'SELECT id, depart, destination, date_depart, prix FROM trajets WHERE id = $1',
+      'SELECT id, depart, destination, date_depart, prix, places_disponibles FROM trajets WHERE id = $1',
       [trajet_id]
     );
     
@@ -83,6 +83,14 @@ app.post('/reservations', async (req, res) => {
       });
     }
 
+    // Vérification des places disponibles
+    if (trajet.rows[0].places_disponibles < seats) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nombre de places insuffisant'
+      });
+    }
+
     // Insertion en base
     const result = await pool.query(
       `INSERT INTO reservations 
@@ -90,6 +98,12 @@ app.post('/reservations', async (req, res) => {
        VALUES ($1, $2, NOW(), 'En attente') 
        RETURNING *`,
       [trajet_id, seats]
+    );
+
+    // Mise à jour des places disponibles
+    await pool.query(
+      'UPDATE trajets SET places_disponibles = places_disponibles - $1 WHERE id = $2',
+      [seats, trajet_id]
     );
 
     // Enrichit la réponse avec les infos du trajet
@@ -251,7 +265,7 @@ app.use((err, req, res, next) => {
 });
 
 // Démarrage du serveur
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`\n🚀 Service Réservation démarré sur http://localhost:${port}`);
   console.log('📚 Endpoints disponibles:');
   console.log(`- POST /reservations`);
@@ -262,8 +276,7 @@ app.listen(port, () => {
   console.log(`- GET  /health\n`);
 });
 
-
-// Ajoutez cette fonction
+// Fonction pour fermer le serveur
 function closeServer() {
   return new Promise((resolve) => {
     server.close(() => {
@@ -273,4 +286,4 @@ function closeServer() {
   });
 }
 
-module.exports = { app, pool, closeServer };
+module.exports = { app, pool, server, closeServer };
