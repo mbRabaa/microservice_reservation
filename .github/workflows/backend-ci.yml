@@ -132,7 +132,7 @@ jobs:
 
   deploy-k3s:
     name: 🚀 Déploiement Kubernetes (k3s)
-    needs: build-and-push
+    needs: deploy-docker
     runs-on: self-hosted
     steps:
       - name: Checkout code
