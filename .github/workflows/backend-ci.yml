@@ -1,5 +1,4 @@
-name: chaine CI/CD complete
-
+name: chaine DevOps 
 on:
   push:
     branches: [main]
